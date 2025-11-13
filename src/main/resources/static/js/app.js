@@ -25,7 +25,7 @@ class TripMapApp {
         const appContainer = document.getElementById('app');
         appContainer.innerHTML = `
             <div class="container-fluid">
-                <h1 class="my-3">Travel Route Planner</h1>
+                <h1 class="my-3">TripMap</h1>
                 <div class="row">
                     <div class="col-md-4">
                         <div id="trip-settings-container"></div>

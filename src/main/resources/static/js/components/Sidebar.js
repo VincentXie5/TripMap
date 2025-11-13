@@ -1,11 +1,11 @@
 import { dateUtils } from '../utils/dateUtils.js';
-import DayPlan from './DayPlan.js';
+import TripRecord from './TripRecord.js';
 
 export default class Sidebar {
     constructor(containerId, state) {
         this.containerId = containerId;
         this.state = state;
-        this.dayPlans = [];
+        this.tripRecords = [];
         this.listeners = {};
 
         this.init();
@@ -14,6 +14,7 @@ export default class Sidebar {
     init() {
         this.render();
         this.bindEvents();
+        this.loadTripRecords();
     }
 
     render() {
@@ -21,113 +22,123 @@ export default class Sidebar {
         container.innerHTML = `
             <div class="card">
                 <div class="card-header">
-                    <h5>Trip Settings</h5>
+                    <h5>Trip History</h5>
                 </div>
                 <div class="card-body">
-                    ${this.renderTripSettings()}
-                    <div id="daysContainer"></div>
+                    ${this.renderTripHistory()}
+                    <div id="recordsContainer"></div>
                 </div>
             </div>
         `;
     }
 
-    renderTripSettings() {
+    renderTripHistory() {
         return `
             <div class="mb-3">
-                <label for="tripName" class="form-label">Trip Name</label>
-                <input type="text" class="form-control" id="tripName"
-                       value="${this.state.tripName}"
-                       placeholder="Enter trip name">
+                <h6>Previous Trips</h6>
+                <p class="text-muted small">View and manage your past travel experiences</p>
             </div>
-            <div class="row mb-3">
-                <div class="col">
-                    <label for="startDate" class="form-label">Start Date</label>
-                    <input type="text" class="form-control" id="startDate"
-                           placeholder="Select start date">
-                </div>
-                <div class="col">
-                    <label for="endDate" class="form-label">End Date</label>
-                    <input type="text" class="form-control" id="endDate"
-                           placeholder="Select end date">
-                </div>
+            <div class="d-grid gap-2 mb-3">
+                <button id="createNewTrip" class="btn btn-primary">
+                    Create New Trip
+                </button>
+                <button id="refreshRecords" class="btn btn-outline-secondary">
+                    Refresh List
+                </button>
             </div>
-            <button id="generateDays" class="btn btn-primary w-100 mb-3">
-                Generate Trip Days
-            </button>
+            <div class="mb-3">
+                <input type="text" class="form-control" id="searchRecords"
+                       placeholder="Search trips...">
+            </div>
         `;
     }
 
-    renderDayPlans() {
-        const daysContainer = document.getElementById('daysContainer');
+    renderTripRecords() {
+        const recordsContainer = document.getElementById('recordsContainer');
 
-        // Clear existing day plans
-        this.dayPlans.forEach(dayPlan => dayPlan.destroy());
-        this.dayPlans = [];
-        daysContainer.innerHTML = '';
+        // Clear existing records
+        this.tripRecords.forEach(record => record.destroy());
+        this.tripRecords = [];
+        recordsContainer.innerHTML = '';
 
-        const days = this.state.getTripDays();
+        const records = this.state.getTripRecords();
 
-        if (days.length === 0) {
+        if (records.length === 0) {
+            recordsContainer.innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <p>No trip records found</p>
+                    <p class="small">Start by creating your first trip</p>
+                </div>
+            `;
             return;
         }
 
-        // Create DayPlan components for each day
-        days.forEach(dayInfo => {
-            const dayPlan = new DayPlan(dayInfo, this.state);
+        // Create TripRecord components for each record
+        records.forEach(recordInfo => {
+            const tripRecord = new TripRecord(recordInfo, this.state);
 
-            // Listen to DayPlan events
-            dayPlan.on('addMarker', (day) => {
-                this.state.currentDay = day;
-                this.emit('addMarker', day);
+            // Listen to TripRecord events
+            tripRecord.on('viewTrip', (tripId) => {
+                this.emit('viewTrip', tripId);
             });
 
-            dayPlan.on('deleteMarker', (markerId) => {
-                this.deleteMarker(markerId);
+            tripRecord.on('editTrip', (tripId) => {
+                this.emit('editTrip', tripId);
             });
 
-            daysContainer.appendChild(dayPlan.getElement());
-            this.dayPlans.push(dayPlan);
+            tripRecord.on('deleteTrip', (tripId) => {
+                this.deleteTripRecord(tripId);
+            });
+
+            recordsContainer.appendChild(tripRecord.getElement());
+            this.tripRecords.push(tripRecord);
         });
     }
 
     bindEvents() {
-        // Date pickers initialization
-        dateUtils.initializeDatePickers();
-
-        // Generate days button
-        document.getElementById('generateDays').addEventListener('click', () => {
-            this.generateDays();
+        // Create new trip button
+        document.getElementById('createNewTrip').addEventListener('click', () => {
+            this.emit('createNewTrip');
         });
 
-        // Trip name input
-        document.getElementById('tripName').addEventListener('input', (e) => {
-            this.state.tripName = e.target.value;
+        // Refresh records button
+        document.getElementById('refreshRecords').addEventListener('click', () => {
+            this.loadTripRecords();
+        });
+
+        // Search input
+        document.getElementById('searchRecords').addEventListener('input', (e) => {
+            this.filterRecords(e.target.value);
         });
     }
 
-    generateDays() {
-        const startDate = document.getElementById('startDate').value;
-        const endDate = document.getElementById('endDate').value;
-
-        if (!startDate || !endDate) {
-            alert('Please select start and end dates');
-            return;
-        }
-
-        this.state.setTripDates(startDate, endDate);
-        this.renderDayPlans();
-        this.emit('daysGenerated');
+    loadTripRecords() {
+        // Load trip records from state or storage
+        this.state.loadTripRecords();
+        this.renderTripRecords();
+        this.emit('recordsLoaded');
     }
 
-    deleteMarker(markerId) {
-        this.state.deleteMarker(markerId);
-        this.emit('markerDeleted');
+    filterRecords(searchTerm) {
+        const filteredRecords = this.state.filterTripRecords(searchTerm);
+
+        // Update display based on filtered results
+        this.tripRecords.forEach(record => {
+            const shouldShow = filteredRecords.some(filtered => filtered.id === record.id);
+            record.getElement().style.display = shouldShow ? 'block' : 'none';
+        });
+    }
+
+    deleteTripRecord(tripId) {
+        this.state.deleteTripRecord(tripId);
+        this.loadTripRecords();
+        this.emit('tripDeleted', tripId);
     }
 
     refresh() {
-        // Refresh all day plans
-        this.dayPlans.forEach(dayPlan => {
-            dayPlan.refresh();
+        // Refresh all trip records
+        this.tripRecords.forEach(record => {
+            record.refresh();
         });
     }
 
@@ -145,8 +156,8 @@ export default class Sidebar {
     }
 
     destroy() {
-        // Clean up all day plans
-        this.dayPlans.forEach(dayPlan => dayPlan.destroy());
-        this.dayPlans = [];
+        // Clean up all trip records
+        this.tripRecords.forEach(record => record.destroy());
+        this.tripRecords = [];
     }
 }
